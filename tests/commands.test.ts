@@ -1,10 +1,8 @@
 import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { runCopy } from "../src/commands/copy.js";
-import { runGlobal } from "../src/commands/global.js";
 import { runHide } from "../src/commands/hide.js";
-import { runLocal } from "../src/commands/local.js";
 import { runRestore } from "../src/commands/restore.js";
 import type { AbsPath } from "../src/lib/types.js";
 import { readManifest, vaultDirFor } from "../src/lib/vault.js";
@@ -34,10 +32,7 @@ describe("eeenv commands (end-to-end)", () => {
 		const vaultDir = vaultDirFor(project as AbsPath);
 		const vaultEnv = path.join(vaultDir, ".env");
 		expect(existsSync(vaultEnv)).toBe(true);
-		const vaulted = await import("node:fs/promises").then((m) =>
-			m.readFile(vaultEnv, "utf8"),
-		);
-		expect(vaulted).toBe(ORIGINAL_ENV);
+		expect(await readFile(vaultEnv, "utf8")).toBe(ORIGINAL_ENV);
 
 		const manifest = await readManifest(project as AbsPath);
 		expect(manifest.files[".env"]?.state).toBe("hidden");
@@ -49,52 +44,68 @@ describe("eeenv commands (end-to-end)", () => {
 		expect(Object.keys(after.files)).toEqual([]);
 	});
 
-	it("global → moves files out; local → moves them back", async () => {
+	it("monorepo: hide finds nested .env files and restores them in place", async () => {
 		const { project } = ctx.current();
-		await writeFileIn(project, ".env", ORIGINAL_ENV);
-		await writeFileIn(project, ".env.local", "X=1\n");
 
-		await runGlobal(project);
-		expect(existsSync(path.join(project, ".env"))).toBe(false);
-		expect(existsSync(path.join(project, ".env.local"))).toBe(false);
+		await writeFileIn(project, ".env", "ROOT=secret-root");
+		await mkdir(path.join(project, "apps/web"), { recursive: true });
+		await writeFile(path.join(project, "apps/web/.env"), "WEB=secret-web");
+		await writeFile(
+			path.join(project, "apps/web/.env.local"),
+			"WEB_LOCAL=secret-web-local",
+		);
+		await mkdir(path.join(project, "packages/api/src"), { recursive: true });
+		await writeFile(path.join(project, "packages/api/.env"), "API=secret-api");
 
+		// Noise that must be skipped
+		await mkdir(path.join(project, "node_modules/x"), { recursive: true });
+		await writeFile(path.join(project, "node_modules/x/.env"), "NOISE=bad");
+
+		await runHide(project);
+
+		const manifest = await readManifest(project as AbsPath);
+		const tracked = Object.keys(manifest.files).sort();
+		expect(tracked).toEqual([
+			".env",
+			"apps/web/.env",
+			"apps/web/.env.local",
+			"packages/api/.env",
+		]);
+
+		// Local files redacted
+		const webLocal = await readFile(path.join(project, "apps/web/.env"), "utf8");
+		expect(webLocal).not.toContain("secret-web");
+		expect(webLocal).toMatch(/^WEB=eeenv_redacted_/m);
+
+		// node_modules untouched
+		const noise = await readFile(path.join(project, "node_modules/x/.env"), "utf8");
+		expect(noise).toBe("NOISE=bad");
+
+		// Vault mirrors the project tree
 		const vaultDir = vaultDirFor(project as AbsPath);
-		expect(existsSync(path.join(vaultDir, ".env"))).toBe(true);
-		expect(existsSync(path.join(vaultDir, ".env.local"))).toBe(true);
+		expect(await readFile(path.join(vaultDir, "apps/web/.env"), "utf8")).toBe(
+			"WEB=secret-web",
+		);
+		expect(await readFile(path.join(vaultDir, "packages/api/.env"), "utf8")).toBe(
+			"API=secret-api",
+		);
 
-		const m1 = await readManifest(project as AbsPath);
-		expect(m1.files[".env"]?.state).toBe("moved");
+		await runRestore(project);
+		expect(await readFile(path.join(project, "apps/web/.env"), "utf8")).toBe(
+			"WEB=secret-web",
+		);
+		expect(await readFile(path.join(project, "packages/api/.env"), "utf8")).toBe(
+			"API=secret-api",
+		);
+		expect(await readFile(path.join(project, ".env"), "utf8")).toBe("ROOT=secret-root");
 
-		await runLocal(project);
-		expect(await readFileIn(project, ".env")).toBe(ORIGINAL_ENV);
-		expect(await readFileIn(project, ".env.local")).toBe("X=1\n");
-		expect(existsSync(path.join(vaultDir, ".env"))).toBe(false);
-
-		const m2 = await readManifest(project as AbsPath);
-		expect(Object.keys(m2.files)).toEqual([]);
-	});
-
-	it("copy → leaves originals intact and stores a vault copy", async () => {
-		const { project } = ctx.current();
-		await writeFileIn(project, ".env", ORIGINAL_ENV);
-
-		await runCopy(project);
-
-		expect(existsSync(path.join(project, ".env"))).toBe(true);
-		expect(await readFileIn(project, ".env")).toBe(ORIGINAL_ENV);
-
-		const vaultDir = vaultDirFor(project as AbsPath);
-		expect(existsSync(path.join(vaultDir, ".env"))).toBe(true);
-
-		const m = await readManifest(project as AbsPath);
-		expect(m.files[".env"]?.state).toBe("copied");
+		const after = await readManifest(project as AbsPath);
+		expect(Object.keys(after.files)).toEqual([]);
 	});
 
 	it("does nothing when no .env files exist", async () => {
 		const { project } = ctx.current();
 		await runHide(project);
-		await runGlobal(project);
-		await runCopy(project);
 		const m = await readManifest(project as AbsPath);
 		expect(Object.keys(m.files)).toEqual([]);
 	});

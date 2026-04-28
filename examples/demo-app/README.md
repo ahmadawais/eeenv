@@ -1,21 +1,39 @@
-# demo-app
+# demo-app (monorepo)
 
-A throwaway project to try every `eeenv` command against. The `.env*` files
-here contain fake credentials — safe to commit in this example, never use in
-real projects.
+A pnpm-style monorepo to try the `eeenv` CLI on. Every `.env*` here contains
+**fake** credentials — safe to commit in this example, never use in real
+projects.
 
-## Files in this folder
+## Layout
 
-| File              | What it is                              | eeenv touches it? |
-| ----------------- | --------------------------------------- | ----------------- |
-| `.env`            | Main secrets (Stripe, DB, OpenAI, AWS…) | Yes               |
-| `.env.local`      | Per-developer overrides                 | Yes               |
-| `.env.production` | Non-secret prod config                  | Yes               |
-| `.env.example`    | Template committed to git               | **No** (excluded) |
+```
+demo-app/
+├─ .env                       ← root secrets (Stripe, OpenAI, AWS, …)
+├─ .env.local                 ← per-developer overrides
+├─ .env.production            ← non-secret prod config
+├─ .env.example               ← template (eeenv leaves this alone)
+├─ pnpm-workspace.yaml
+├─ apps/
+│  └─ web/
+│     ├─ .env                 ← web app secrets
+│     ├─ .env.local
+│     └─ package.json
+└─ packages/
+   ├─ api/
+   │  ├─ .env                 ← API server secrets
+   │  └─ package.json
+   └─ worker/
+      ├─ .env                 ← background worker secrets
+      └─ package.json
+```
+
+`eeenv` walks the project recursively. `node_modules`, `.git`, `dist`,
+`build`, `.next`, `.turbo`, `.cache`, `coverage`, `.venv`, etc. are skipped
+automatically. Symlinked directories are not followed.
 
 ## One-time setup
 
-From the repo root, build and link the CLI globally:
+From the repo root:
 
 ```sh
 pnpm install
@@ -23,94 +41,42 @@ pnpm build
 pnpm link --global
 ```
 
-Now `eeenv` is on your `$PATH`. Then `cd` into this folder:
+`eeenv` is now on your `$PATH`.
+
+## Try it
 
 ```sh
 cd examples/demo-app
-```
 
-## Try every command
-
-### 1. See what's there
-
-```sh
+# 1. See every .env file the tool would touch:
 eeenv status
-```
+#   Untracked .env files:
+#     · .env
+#     · .env.local
+#     · .env.production
+#     · apps/web/.env
+#     · apps/web/.env.local
+#     · packages/api/.env
+#     · packages/worker/.env
 
-Shows the project path, vault path (`~/.eeenv/vault/<absolute-path>/`),
-and lists `.env`, `.env.local`, `.env.production` as **untracked**.
-`.env.example` is ignored.
-
-### 2. Hide — vault real values, leave redacted stubs locally
-
-```sh
+# 2. Vault real values, redact local files:
 eeenv hide
-cat .env
-```
+cat apps/web/.env
+#   NEXT_PUBLIC_API_URL=eeenv_redacted_<random-hex>
+#   SESSION_SECRET=eeenv_redacted_<random-hex>
+#   …
 
-Local `.env` now reads:
+# 3. Real values are sitting safely in the vault, mirroring the project tree:
+ls -R ~/.eeenv/vault"$(pwd)"
+cat ~/.eeenv/vault"$(pwd)"/.eeenv.json   # manifest with state per file
 
-```env
-# --- demo-app secrets (FAKE — safe to commit in this example) ---
-
-STRIPE_SECRET_KEY=eeenv_redacted_<random-hex>
-DATABASE_URL=eeenv_redacted_<random-hex>
-…
-export AWS_ACCESS_KEY_ID=eeenv_redacted_<random-hex>
-```
-
-Real values live in `~/.eeenv/vault/<this-folder>/`. A coding agent reading
-the project sees only random tokens. Comments, blank lines, and the `export`
-prefix are preserved.
-
-### 3. Restore — put real values back
-
-```sh
+# 4. Bring everything back when you’re done:
 eeenv restore
-cat .env
-```
-
-Original values are back. `eeenv status` shows nothing tracked.
-
-### 4. Global — move files out of the project
-
-```sh
-eeenv global
-ls -A | grep .env
-```
-
-Only `.env.example` remains. The rest were **moved** into the vault.
-
-### 5. Local — move them back
-
-```sh
-eeenv local
-ls -A | grep .env
-```
-
-All files are back where they started.
-
-### 6. Copy — keep local, mirror to vault
-
-```sh
-eeenv copy
-eeenv status
-```
-
-Both the local files and a vault copy exist. Useful as a quick backup before
-editing.
-
-## Inspect the vault
-
-```sh
-ls -la ~/.eeenv/vault"$(pwd)"
-cat ~/.eeenv/vault"$(pwd)"/.eeenv.json  # manifest (state per file)
 ```
 
 ## Reset
 
 ```sh
 eeenv restore || true
-eeenv local   || true
 rm -rf ~/.eeenv/vault"$(pwd)"
 ```

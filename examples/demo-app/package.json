@@ -2,13 +2,11 @@
 	"name": "demo-app",
 	"version": "0.0.1",
 	"private": true,
-	"description": "Sample project to try the eeenv CLI on.",
+	"description": "Sample monorepo to try the eeenv CLI on.",
 	"type": "module",
 	"scripts": {
 		"hide": "eeenv hide",
 		"restore": "eeenv restore",
-		"global": "eeenv global",
-		"local": "eeenv local",
 		"status": "eeenv status"
 	}
 }

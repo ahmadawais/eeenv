@@ -21,3 +21,4 @@
 - Use ANSI Shadow font for ASCII art at large terminal widths and ANSI Compact for small widths. Confidence: 0.85
 - Use minimal white, gray, and black colors for ASCII art banners. Confidence: 0.85
 - Check if package is publishable using `npx can-i-publish` before building or publishing. Prefer `can-i-publish` over `npm-name-cli` for name checks. Confidence: 0.90
+- CLI should work from any subdirectory of a project (including monorepo packages), not just the project root — walk up to find the relevant root. Confidence: 0.70

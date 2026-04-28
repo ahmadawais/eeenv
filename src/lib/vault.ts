@@ -3,12 +3,7 @@ import fs from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import type { AbsPath, EnvFileName, FileState } from "./types.js";
-
-/** Resolved at call time so tests can override $HOME. */
-export function vaultRoot(): AbsPath {
-	return path.join(homedir(), ".eeenv", "vault") as AbsPath;
-}
+import type { AbsPath, FileState, RelPath } from "./types.js";
 
 const FileStateSchema = z.enum(["hidden"]);
 
@@ -27,6 +22,11 @@ export const ManifestSchema = z.object({
 export type ManifestEntry = z.infer<typeof ManifestEntrySchema>;
 export type Manifest = z.infer<typeof ManifestSchema>;
 
+/** Resolved at call time so tests can override $HOME. */
+export function vaultRoot(): AbsPath {
+	return path.join(homedir(), ".eeenv", "vault") as AbsPath;
+}
+
 /** Coerce a possibly-relative path string to an AbsPath. */
 export function toAbs(p: string): AbsPath {
 	return path.resolve(p) as AbsPath;
@@ -42,8 +42,19 @@ export function manifestPathFor(projectDir: AbsPath): AbsPath {
 	return path.join(vaultDirFor(projectDir), ".eeenv.json") as AbsPath;
 }
 
-export function vaultPathFor(projectDir: AbsPath, name: EnvFileName): AbsPath {
-	return path.join(vaultDirFor(projectDir), name) as AbsPath;
+/**
+ * POSIX rel path from the project root for a file inside it.
+ * Always uses forward slashes, even on Windows, so manifest keys are stable.
+ */
+export function relFromProject(projectDir: AbsPath, filePath: AbsPath): RelPath {
+	const r = path.relative(projectDir, filePath);
+	return r.split(path.sep).join("/") as RelPath;
+}
+
+/** Vault path for a given project-relative file. */
+export function vaultPathFor(projectDir: AbsPath, rel: RelPath): AbsPath {
+	const native = rel.split("/").join(path.sep);
+	return path.join(vaultDirFor(projectDir), native) as AbsPath;
 }
 
 export async function ensureDir(dir: AbsPath): Promise<void> {

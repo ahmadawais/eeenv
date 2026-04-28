@@ -1,8 +1,7 @@
-import path from "node:path";
 import pc from "picocolors";
 import { discoverEnvFiles } from "../lib/discover.js";
 import { bold, dim } from "../lib/log.js";
-import { readManifest, toAbs, vaultDirFor } from "../lib/vault.js";
+import { readManifest, relFromProject, toAbs, vaultDirFor } from "../lib/vault.js";
 
 /** Show what eeenv is tracking for this project. */
 export async function runStatus(cwdRaw: string): Promise<void> {
@@ -17,25 +16,20 @@ export async function runStatus(cwdRaw: string): Promise<void> {
 		console.log(dim("Nothing tracked."));
 	} else {
 		console.log("");
-		for (const [name, entry] of entries) {
+		for (const [rel, entry] of entries) {
 			console.log(
-				`  ${pc.magenta("hidden")} ${bold(name)} ${dim(`(${entry.updatedAt})`)}`,
+				`  ${pc.magenta("hidden")} ${bold(rel)} ${dim(`(${entry.updatedAt})`)}`,
 			);
 		}
 	}
 
 	const local = await discoverEnvFiles(cwd);
-	const untracked = local.filter((f) => !(path.basename(f) in manifest.files));
+	const untracked = local
+		.map((f) => relFromProject(cwd, f))
+		.filter((rel) => !(rel in manifest.files));
 	if (untracked.length === 0) return;
 
 	console.log("");
-	console.log(dim("Untracked local .env files:"));
-	for (const f of untracked) console.log(`  ${dim("·")} ${path.basename(f)}`);
-}
-
-function stateColor(state: "moved" | "copied" | "hidden"): string {
-	const padded = state.padEnd(7);
-	if (state === "moved") return pc.yellow(padded);
-	if (state === "hidden") return pc.magenta(padded);
-	return pc.cyan(padded);
+	console.log(dim("Untracked .env files:"));
+	for (const rel of untracked) console.log(`  ${dim("·")} ${rel}`);
 }

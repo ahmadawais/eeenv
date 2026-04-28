@@ -4,11 +4,12 @@ import { discoverEnvFiles } from "../lib/discover.js";
 import { copyByteWise } from "../lib/fs-ops.js";
 import { bold, info, ok, warn } from "../lib/log.js";
 import { redactInPlace } from "../lib/redact.js";
-import type { AbsPath, EnvFileName } from "../lib/types.js";
+import type { AbsPath } from "../lib/types.js";
 import {
 	buildEntry,
 	ensureDir,
 	readManifest,
+	relFromProject,
 	toAbs,
 	vaultDirFor,
 	vaultPathFor,
@@ -18,16 +19,15 @@ import {
 /**
  * Vault real values, then redact local files.
  *
- * Step 1: byte-copy each .env* file to the vault (real values preserved).
- * Step 2: rewrite local file with `KEY=<random-token>` for every assignment.
- *
- * After this, agents reading local .env files see only redacted tokens.
+ * Walks the project recursively (skipping node_modules, .git, build dirs, etc.),
+ * byte-copies each .env* into the vault under its project-relative path, then
+ * rewrites the local file with `KEY=<random-token>` for every assignment.
  */
 export async function runHide(cwdRaw: string): Promise<void> {
 	const cwd = toAbs(cwdRaw);
 	const files = await discoverEnvFiles(cwd);
 	if (files.length === 0) {
-		warn("No .env files found in this directory.");
+		warn("No .env files found in this project.");
 		return;
 	}
 
@@ -37,20 +37,21 @@ export async function runHide(cwdRaw: string): Promise<void> {
 	const spinner = ora({ text: "Vaulting and redacting…" }).start();
 
 	for (const src of files) {
-		const name = path.basename(src) as EnvFileName;
-		const dest = vaultPathFor(cwd, name);
+		const rel = relFromProject(cwd, src);
+		const dest = vaultPathFor(cwd, rel);
+		await ensureDir(path.dirname(dest) as AbsPath);
 
 		await copyByteWise(src, dest);
 		const count = await redactInPlace(src);
 
-		manifest.files[name] = buildEntry({
+		manifest.files[rel] = buildEntry({
 			state: "hidden",
-			originalPath: path.join(cwd, name) as AbsPath,
+			originalPath: src,
 			vaultPath: dest,
 		});
 
 		spinner.stop();
-		ok(`hidden ${bold(name)} — vaulted real values, redacted ${count} key(s) locally.`);
+		ok(`hidden ${bold(rel)} — vaulted real values, redacted ${count} key(s) locally.`);
 		spinner.start();
 	}
 
