@@ -1,4 +1,4 @@
-![eeenv](https://raw.githubusercontent.com/ahmadawais/eeenv/main/docs/eeenv-logo.png)
+![eeenv](https://github.com/ahmadawais/eeenv/blob/main/.github/image.png?raw=true)
 
 # eeenv
 
