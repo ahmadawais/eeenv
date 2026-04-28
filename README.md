@@ -2,9 +2,9 @@
 
 # eeenv
 
-Hide your project `.env` files from coding agents. Byte-copies real values into
-`~/.eeenv/vault/`, then replaces local files with random tokens. When you're
-done, restore everything with one command.
+Hide your project `.env` files from coding agents. Encrypts real values into
+`~/.eeenv/vault/`, then replaces local files with random tokens. Your passphrase
+is stored in the OS keychain — AI agents can't access it without your biometrics.
 
 ## Install
 
@@ -17,12 +17,21 @@ npm install -g eeenv
 ```sh
 # From your project root — recursively finds every .env* / .dev.vars* file:
 eeenv hide
+# First run: set a passphrase (stored in your OS keychain)
 
 # Coding agents now see random tokens instead of real values.
 # Work safely. When you're done:
 
 eeenv restore
+# If passphrase not in keychain: prompts you to enter it
 ```
+
+## How it works
+
+1. **Encryption**: Real values are encrypted with AES-256-GCM using your passphrase
+2. **Keychain**: Your passphrase lives in the OS keychain (macOS `security`, Linux `secret-tool`, Windows Credential Manager)
+3. **Redaction**: Local files get random tokens like `eeenv_redacted_abc123...`
+4. **Protection**: AI agents can't read the keychain without your system password/biometrics
 
 ## Commands
 
@@ -34,6 +43,7 @@ Show what's tracked and what's discoverable.
 $ eeenv status
 Project: /Users/you/project
 Vault:   ~/.eeenv/vault/Users/you/project
+Keychain: passphrase in keychain
 
   hidden .env (2026-04-28T12:00:00.000Z)
   hidden packages/api/.env (2026-04-28T12:00:00.000Z)
@@ -43,20 +53,36 @@ Untracked env files:
 
 Skipped via .eeenv.json ignoreFiles:
   · .env.local
-  · .env.development
+  · packages/legacy/.env
 ```
 
 ### `eeenv hide`
 
-Byte-copies every discovered env file into `~/.eeenv/vault/<absolute-project-path>/`,
-then rewrites local files with redacted random tokens. The original values
-never enter JavaScript memory — files are copied at the OS level.
+Encrypts every discovered env file into `~/.eeenv/vault/<absolute-project-path>/`,
+then rewrites local files with redacted random tokens.
 
+**First run** — prompts you to set a passphrase:
 ```
 $ eeenv hide
+Set a vault passphrase: ********
+Confirm passphrase: ********
+✓ Passphrase saved to OS keychain.
 ✓ hidden .env — vaulted real values, redacted 14 key(s) locally.
 ✓ hidden packages/api/.env — vaulted real values, redacted 3 key(s) locally.
 • Run eeenv restore to put real values back.
+```
+
+**Subsequent runs** — uses existing passphrase from keychain:
+```
+$ eeenv hide
+✓ hidden .env — vaulted real values, redacted 14 key(s) locally.
+```
+
+**Double-hide protection** — blocks if files already redacted:
+```
+$ eeenv hide
+✗ Cannot hide — some files appear to already be redacted:
+  .env — already tracked in vault (run eeenv restore first)
 ```
 
 **Before:**
@@ -73,11 +99,20 @@ NODE_ENV=production
 
 ### `eeenv restore`
 
-Copies every file back from the vault to its original location. Real values
-are fully restored.
+Decrypts files from the vault and restores them to their original locations.
 
+**Passphrase in keychain** — seamless restore:
 ```
 $ eeenv restore
+✓ restored .env
+✓ restored packages/api/.env
+```
+
+**Passphrase not in keychain** — prompts to unlock:
+```
+$ eeenv restore
+Vault is locked. Enter passphrase to unlock: ********
+✓ Vault unlocked.
 ✓ restored .env
 ✓ restored packages/api/.env
 ```
@@ -143,24 +178,26 @@ Override by setting `ignoreFiles` explicitly.
 ~/.eeenv/vault/
 └─ <absolute-project-path>/
    ├─ manifest.json          # tracks which files are hidden
-   ├─ .env                   # vaulted real values
+   ├─ .env                   # encrypted real values (AES-256-GCM)
    ├─ apps/
    │  └─ web/
-   │     └─ .env
+   │     └─ .env             # encrypted
    └─ packages/
       └─ api/
-         ├─ .env
-         └─ .dev.vars
+         ├─ .env             # encrypted
+         └─ .dev.vars        # encrypted
 ```
 
-The vault mirrors your project tree exactly. File paths are relative from
-the project root. A file at `<project>/apps/web/.env` lives in the vault at
-`~/.eeenv/vault/<project>/apps/web/.env`.
+The vault mirrors your project tree exactly. Files are encrypted with
+AES-256-GCM using your passphrase. The passphrase is stored in your OS
+keychain — AI agents cannot access it without your system password/biometrics.
 
 ## Security
 
-- **Byte-copy**: `.env` files are copied with `fs.copyFile` — real values
-  never enter JavaScript memory during vaulting.
+- **AES-256-GCM encryption**: Real values are encrypted, not just copied
+- **OS keychain**: Passphrase lives in macOS Keychain, Linux Secret Service,
+  or Windows Credential Manager — requires your biometrics/system password
+- **Double-hide protection**: Blocks `hide` if files already redacted or tracked
 - **Random tokens**: Each redacted value is a fresh 24-hex-char random token.
   No deterministic mapping, no length leak.
 - **Permission-locked**: Vault files are created with mode `0o600`
@@ -172,15 +209,14 @@ the project root. A file at `<project>/apps/web/.env` lives in the vault at
 ## Monorepos
 
 Works automatically. Run from any directory — `eeenv` walks the tree
-upward? No, it walks downward from the current directory.
-A `.env` at `packages/api/.env` and another at `apps/web/.env` are tracked
-separately under their relative paths. The vault mirrors the same structure.
-No collisions across packages.
+from the current directory downward. A `.env` at `packages/api/.env` and
+another at `apps/web/.env` are tracked separately under their relative
+paths. The vault mirrors the same structure. No collisions across packages.
 
 ## Cloudflare Workers
 
 `.dev.vars` and `.dev.vars.*` files are discovered and processed identically
-to `.env` files. Same vaulting, same redaction, same restore. Templates like
+to `.env` files. Same encryption, same redaction, same restore. Templates like
 `.dev.vars.example` are excluded.
 
 ## Skipped directories
