@@ -1,0 +1,2 @@
+# packages/api — EXAMPLE Cloudflare dev vars (not touched by eeenv)
+CF_WORKERS_KV_NAMESPACE=YOUR_KV_NAMESPACE_ID

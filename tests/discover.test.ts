@@ -6,7 +6,7 @@ import type { AbsPath } from "../src/lib/types.js";
 import { makeSandbox, writeFileIn } from "./helpers.js";
 
 describe("isEnvFilename", () => {
-	it("matches .env and .env.<x> but excludes templates", () => {
+	it("matches .env, .env.<x>, .dev.vars, .dev.vars.<x> — excludes templates", () => {
 		expect(isEnvFilename(".env")).toBe(true);
 		expect(isEnvFilename(".env.local")).toBe(true);
 		expect(isEnvFilename(".env.production")).toBe(true);
@@ -14,6 +14,10 @@ describe("isEnvFilename", () => {
 		expect(isEnvFilename(".env.sample")).toBe(false);
 		expect(isEnvFilename(".env.template")).toBe(false);
 		expect(isEnvFilename(".env.dist")).toBe(false);
+		expect(isEnvFilename(".dev.vars")).toBe(true);
+		expect(isEnvFilename(".dev.vars.production")).toBe(true);
+		expect(isEnvFilename(".dev.vars.example")).toBe(false);
+		expect(isEnvFilename(".dev.vars.template")).toBe(false);
 		expect(isEnvFilename("env")).toBe(false);
 		expect(isEnvFilename("notes.txt")).toBe(false);
 	});

@@ -7,6 +7,10 @@ const EXCLUDE_FILES: ReadonlySet<string> = new Set([
 	".env.sample",
 	".env.template",
 	".env.dist",
+	".dev.vars.example",
+	".dev.vars.sample",
+	".dev.vars.template",
+	".dev.vars.dist",
 ]);
 
 /**
@@ -53,16 +57,18 @@ const SKIP_DIRS: ReadonlySet<string> = new Set([
 	"venv",
 ]);
 
-/** Match `.env` and `.env.<anything>`, single segment, not in EXCLUDE_FILES. */
+/**
+ * Match `.env`, `.env.<x>`, `.dev.vars`, `.dev.vars.<x>` — single segment, not in EXCLUDE_FILES.
+ */
 export function isEnvFilename(name: string): name is EnvFileName {
 	if (EXCLUDE_FILES.has(name)) return false;
 	if (name.includes("/") || name.includes("\\")) return false;
-	if (name === ".env") return true;
-	return name.startsWith(".env.");
+	if (name === ".env" || name === ".dev.vars") return true;
+	return name.startsWith(".env.") || name.startsWith(".dev.vars.");
 }
 
 /**
- * Recursively find `.env*` files under `dir`, skipping common noise dirs and
+ * Recursively find `.env*` and `.dev.vars*` files under `dir`, skipping common noise dirs and
  * symlinks. Returns absolute paths. Never follows symlinked directories.
  */
 export async function discoverEnvFiles(dir: AbsPath): Promise<readonly AbsPath[]> {

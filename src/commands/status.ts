@@ -1,12 +1,14 @@
 import pc from "picocolors";
+import { readProjectConfig, shouldIgnore } from "../lib/config.js";
 import { discoverEnvFiles } from "../lib/discover.js";
-import { bold, dim } from "../lib/log.js";
+import { bold, dim, info } from "../lib/log.js";
 import { readManifest, relFromProject, toAbs, vaultDirFor } from "../lib/vault.js";
 
-/** Show what eeenv is tracking for this project. */
+/** Show what eeenv is tracking / would touch for this project. */
 export async function runStatus(cwdRaw: string): Promise<void> {
 	const cwd = toAbs(cwdRaw);
 	const manifest = await readManifest(cwd);
+	const config = await readProjectConfig(cwd);
 
 	console.log(bold(`Project: ${pc.cyan(cwd)}`));
 	console.log(dim(`Vault:   ${vaultDirFor(cwd)}`));
@@ -23,13 +25,25 @@ export async function runStatus(cwdRaw: string): Promise<void> {
 		}
 	}
 
-	const local = await discoverEnvFiles(cwd);
-	const untracked = local
-		.map((f) => relFromProject(cwd, f))
-		.filter((rel) => !(rel in manifest.files));
-	if (untracked.length === 0) return;
+	const all = await discoverEnvFiles(cwd);
+	const allRel = all.map((f) => relFromProject(cwd, f));
+	const ignored = allRel.filter((f) => shouldIgnore(f, config.ignoreFiles));
+	const untracked = allRel.filter(
+		(f) => !(f in manifest.files) && !shouldIgnore(f, config.ignoreFiles),
+	);
 
-	console.log("");
-	console.log(dim("Untracked .env files:"));
-	for (const rel of untracked) console.log(`  ${dim("·")} ${rel}`);
+	if (untracked.length > 0) {
+		console.log("");
+		console.log(dim("Untracked env files:"));
+		for (const rel of untracked) console.log(`  ${dim("·")} ${rel}`);
+	} else if (allRel.length === 0) {
+		console.log("");
+		info("No .env / .dev.vars files found in this project.");
+	}
+
+	if (ignored.length > 0) {
+		console.log("");
+		console.log(dim("Skipped via .eeenv.json ignoreFiles:"));
+		for (const rel of ignored) console.log(`  ${dim("·")} ${rel}`);
+	}
 }

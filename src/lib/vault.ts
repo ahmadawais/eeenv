@@ -39,7 +39,7 @@ export function vaultDirFor(projectDir: AbsPath): AbsPath {
 }
 
 export function manifestPathFor(projectDir: AbsPath): AbsPath {
-	return path.join(vaultDirFor(projectDir), ".eeenv.json") as AbsPath;
+	return path.join(vaultDirFor(projectDir), "manifest.json") as AbsPath;
 }
 
 /**

@@ -10,17 +10,24 @@ const ASSIGNMENT = /^(\s*)(export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/;
  * Preserves: comments, blank lines, `export ` prefix, key names.
  * Replaces: everything to the right of `=` on assignment lines.
  *
+ * Keys listed in `skip` keep their real values locally (useful for
+ * non-sensitive vars like `NODE_ENV`). The full file is still vaulted.
+ *
  * The original value bytes are read off disk in order to discard them, but
- * are never inspected, logged, or returned. Each value is replaced with a
+ * are never inspected, logged, or returned. Each redacted value gets a
  * fresh random token so secret length / entropy isn't leaked either.
  */
-export async function redactInPlace(filePath: AbsPath): Promise<number> {
+export async function redactInPlace(
+	filePath: AbsPath,
+	skip: readonly string[] = [],
+): Promise<number> {
+	const skipSet = new Set(skip);
 	const content = await fs.readFile(filePath, "utf8");
 	const lines = content.split(/\r?\n/);
 
 	let replaced = 0;
 	const out = lines.map((line) => {
-		const next = redactLine(line);
+		const next = redactLine(line, skipSet);
 		if (next !== line) replaced += 1;
 		return next;
 	});
@@ -29,7 +36,7 @@ export async function redactInPlace(filePath: AbsPath): Promise<number> {
 	return replaced;
 }
 
-function redactLine(line: string): string {
+function redactLine(line: string, skip: ReadonlySet<string>): string {
 	const trimmed = line.trimStart();
 	if (trimmed === "" || trimmed.startsWith("#")) return line;
 
@@ -39,6 +46,9 @@ function redactLine(line: string): string {
 	const leading = m[1] ?? "";
 	const exp = m[2] ?? "";
 	const key = m[3] ?? "";
+
+	if (skip.has(key)) return line;
+
 	const token = `eeenv_redacted_${randomBytes(12).toString("hex")}`;
 	return `${leading}${exp}${key}=${token}`;
 }

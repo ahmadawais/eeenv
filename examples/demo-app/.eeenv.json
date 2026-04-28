@@ -1,0 +1,4 @@
+{
+	"skipKeys": ["NODE_ENV", "DEBUG", "NEXT_PUBLIC_API_URL", "VERCEL_ENV", "CI", "PORT"],
+	"ignoreFiles": [".env.local", "packages/one/**", "packages/two/**"]
+}
