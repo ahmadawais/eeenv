@@ -1,3 +1,5 @@
+![eeenv](https://raw.githubusercontent.com/ahmadawais/eeenv/main/docs/eeenv-logo.png)
+
 # eeenv
 
 Hide your project `.env` files from coding agents. Byte-copies real values into
