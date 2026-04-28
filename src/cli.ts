@@ -31,7 +31,7 @@ program
 program
 	.command("hide")
 	.description(
-		"Copy real .env* files into the vault, then replace local values with random tokens.",
+		"Copy real .env* files into the vault (encrypted), then replace local values with random tokens.",
 	)
 	.action(async (_opts, cmd: Command) => {
 		await runHide(getCwd(cmd));

@@ -2,16 +2,28 @@ import pc from "picocolors";
 import { readProjectConfig, shouldIgnore } from "../lib/config.js";
 import { discoverEnvFiles } from "../lib/discover.js";
 import { bold, dim, info } from "../lib/log.js";
-import { readManifest, relFromProject, toAbs, vaultDirFor } from "../lib/vault.js";
+import {
+	isVaultUnlocked,
+	readManifest,
+	relFromProject,
+	toAbs,
+	vaultDirFor,
+} from "../lib/vault.js";
 
 /** Show what eeenv is tracking / would touch for this project. */
 export async function runStatus(cwdRaw: string): Promise<void> {
 	const cwd = toAbs(cwdRaw);
 	const manifest = await readManifest(cwd);
 	const config = await readProjectConfig(cwd);
+	const hasPassphrase = await isVaultUnlocked();
 
 	console.log(bold(`Project: ${pc.cyan(cwd)}`));
 	console.log(dim(`Vault:   ${vaultDirFor(cwd)}`));
+
+	const keychainStatus = hasPassphrase
+		? pc.green("passphrase in keychain")
+		: pc.red("no passphrase in keychain");
+	console.log(dim(`Keychain: ${keychainStatus}`));
 
 	const entries = Object.entries(manifest.files);
 	if (entries.length === 0) {

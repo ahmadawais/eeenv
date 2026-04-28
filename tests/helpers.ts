@@ -38,19 +38,24 @@ export async function readFileIn(dir: string, name: string): Promise<string> {
 }
 
 const HOME_KEY = "HOME";
+const TEST_KEYCHAIN_KEY = "EEENV_TEST_KEYCHAIN";
 
 /** Test hook that sets $HOME for each test and restores after. */
 export function withSandboxHome(): { current: () => Sandbox } {
 	let sandbox: Sandbox;
 	let prevHome: string | undefined;
+	let prevTestKeychain: string | undefined;
 	beforeEach(async () => {
 		sandbox = await makeSandbox();
 		prevHome = process.env[HOME_KEY];
 		process.env[HOME_KEY] = sandbox.home;
+		prevTestKeychain = process.env[TEST_KEYCHAIN_KEY];
+		process.env[TEST_KEYCHAIN_KEY] = sandbox.home;
 	});
 	afterEach(async () => {
 		// Assigning undefined deletes the key in Node's env proxy.
 		process.env[HOME_KEY] = prevHome;
+		process.env[TEST_KEYCHAIN_KEY] = prevTestKeychain;
 		await sandbox.cleanup();
 	});
 	return { current: () => sandbox };

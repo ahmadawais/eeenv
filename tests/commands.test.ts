@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { runHide } from "../src/commands/hide.js";
 import { runRestore } from "../src/commands/restore.js";
 import type { AbsPath } from "../src/lib/types.js";
-import { readManifest, vaultDirFor } from "../src/lib/vault.js";
+import { readManifest, storePassphrase, vaultDirFor } from "../src/lib/vault.js";
 import { readFileIn, withSandboxHome, writeFileIn } from "./helpers.js";
 
 const ORIGINAL_ENV = [
@@ -18,9 +18,10 @@ const ORIGINAL_ENV = [
 describe("eeenv commands (end-to-end)", () => {
 	const ctx = withSandboxHome();
 
-	it("hide → vaults real values and redacts locally; restore brings them back", async () => {
+	it("hide → vaults encrypted real values and redacts locally; restore brings them back", async () => {
 		const { project } = ctx.current();
 		await writeFileIn(project, ".env", ORIGINAL_ENV);
+		await storePassphrase("test-pass");
 
 		await runHide(project);
 
@@ -32,7 +33,13 @@ describe("eeenv commands (end-to-end)", () => {
 		const vaultDir = vaultDirFor(project as AbsPath);
 		const vaultEnv = path.join(vaultDir, ".env");
 		expect(existsSync(vaultEnv)).toBe(true);
-		expect(await readFile(vaultEnv, "utf8")).toBe(ORIGINAL_ENV);
+
+		// Vault file should be encrypted (not plaintext)
+		const vaultContent = await readFile(vaultEnv, "utf8");
+		expect(vaultContent).not.toBe(ORIGINAL_ENV);
+		expect(vaultContent).not.toContain("sk_live_supersecret");
+		// Should be base64-looking encrypted data
+		expect(Buffer.from(vaultContent, "base64").length).toBeGreaterThan(0);
 
 		const manifest = await readManifest(project as AbsPath);
 		expect(manifest.files[".env"]?.state).toBe("hidden");
@@ -46,6 +53,7 @@ describe("eeenv commands (end-to-end)", () => {
 
 	it("monorepo: hide finds nested .env files and restores them in place", async () => {
 		const { project } = ctx.current();
+		await storePassphrase("test-pass");
 
 		await writeFileIn(project, ".env", "ROOT=secret-root");
 		await mkdir(path.join(project, "apps/web"), { recursive: true });
@@ -81,14 +89,15 @@ describe("eeenv commands (end-to-end)", () => {
 		const noise = await readFile(path.join(project, "node_modules/x/.env"), "utf8");
 		expect(noise).toBe("NOISE=bad");
 
-		// Vault mirrors the project tree
+		// Vault mirrors the project tree — files should be encrypted
 		const vaultDir = vaultDirFor(project as AbsPath);
-		expect(await readFile(path.join(vaultDir, "apps/web/.env"), "utf8")).toBe(
-			"WEB=secret-web",
-		);
-		expect(await readFile(path.join(vaultDir, "packages/api/.env"), "utf8")).toBe(
-			"API=secret-api",
-		);
+		const vaultWeb = await readFile(path.join(vaultDir, "apps/web/.env"), "utf8");
+		expect(vaultWeb).not.toBe("WEB=secret-web");
+		expect(vaultWeb).not.toContain("secret-web");
+
+		const vaultApi = await readFile(path.join(vaultDir, "packages/api/.env"), "utf8");
+		expect(vaultApi).not.toBe("API=secret-api");
+		expect(vaultApi).not.toContain("secret-api");
 
 		await runRestore(project);
 		expect(await readFile(path.join(project, "apps/web/.env"), "utf8")).toBe(
@@ -105,6 +114,7 @@ describe("eeenv commands (end-to-end)", () => {
 
 	it("skipKeys: leaves listed keys un-redacted locally", async () => {
 		const { project } = ctx.current();
+		await storePassphrase("test-pass");
 		await writeFileIn(
 			project,
 			".eeenv.json",
@@ -126,6 +136,7 @@ describe("eeenv commands (end-to-end)", () => {
 
 	it("ignoreFiles: skips matching files entirely", async () => {
 		const { project } = ctx.current();
+		await storePassphrase("test-pass");
 		await writeFileIn(
 			project,
 			".eeenv.json",
@@ -156,6 +167,7 @@ describe("eeenv commands (end-to-end)", () => {
 
 	it("discovers .dev.vars files", async () => {
 		const { project } = ctx.current();
+		await storePassphrase("test-pass");
 		await writeFileIn(project, ".dev.vars", "CF_TOKEN=secret-cf");
 		await writeFileIn(project, ".dev.vars.example", "CF_TOKEN=dev-cf-template");
 		await mkdir(path.join(project, "packages/worker"), { recursive: true });
@@ -188,5 +200,25 @@ describe("eeenv commands (end-to-end)", () => {
 		await runHide(project);
 		const m = await readManifest(project as AbsPath);
 		expect(Object.keys(m.files)).toEqual([]);
+	});
+
+	it("restore prompts for passphrase when not in keychain", async () => {
+		const { project } = ctx.current();
+		await storePassphrase("test-pass");
+		await writeFileIn(project, ".env", ORIGINAL_ENV);
+
+		await runHide(project);
+
+		// Simulate passphrase not in keychain by clearing it
+		const { deleteKeychainSecret } = await import("../src/lib/keychain.js");
+		await deleteKeychainSecret();
+
+		// Restore should prompt for passphrase — use test bypass
+		process.env.EEENV_TEST_PASSPHRASE = "test-pass";
+		await runRestore(project);
+		process.env.EEENV_TEST_PASSPHRASE = undefined;
+
+		// Local file should be restored
+		expect(await readFileIn(project, ".env")).toBe(ORIGINAL_ENV);
 	});
 });

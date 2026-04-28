@@ -3,6 +3,13 @@ import fs from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { decrypt, encrypt } from "./crypto.js";
+import {
+	KeychainError,
+	deleteKeychainSecret,
+	getKeychainSecret,
+	setKeychainSecret,
+} from "./keychain.js";
 import type { AbsPath, FileState, RelPath } from "./types.js";
 
 const FileStateSchema = z.enum(["hidden"]);
@@ -104,6 +111,55 @@ export function buildEntry(args: {
 		vaultPath: args.vaultPath,
 		updatedAt: new Date().toISOString(),
 	};
+}
+
+/* ── Keychain / encryption helpers ─────────────────────────────── */
+
+/** Store a passphrase in the OS keychain. */
+export async function storePassphrase(passphrase: string): Promise<void> {
+	await setKeychainSecret(passphrase);
+}
+
+/** Retrieve the vault passphrase from the OS keychain. */
+export async function getPassphrase(): Promise<string | null> {
+	try {
+		return await getKeychainSecret();
+	} catch (e) {
+		if (e instanceof KeychainError) return null;
+		throw e;
+	}
+}
+
+/** Delete the vault passphrase from the OS keychain (locks the vault). */
+export async function lockVault(): Promise<void> {
+	await deleteKeychainSecret();
+}
+
+/** Check whether the vault passphrase is present in the keychain. */
+export async function isVaultUnlocked(): Promise<boolean> {
+	const passphrase = await getPassphrase();
+	return passphrase !== null;
+}
+
+/** Read a local file, encrypt it, and write the ciphertext to the vault path. */
+export async function encryptToVault(
+	src: AbsPath,
+	dest: AbsPath,
+	passphrase: string,
+): Promise<void> {
+	const plaintext = await fs.readFile(src, "utf8");
+	const ciphertext = encrypt(plaintext, passphrase);
+	await ensureDir(path.dirname(dest) as AbsPath);
+	await fs.writeFile(dest, ciphertext, { mode: 0o600 });
+}
+
+/** Read an encrypted vault file, decrypt it, and return the plaintext. */
+export async function decryptFromVault(
+	vaultPath: AbsPath,
+	passphrase: string,
+): Promise<string> {
+	const ciphertext = await fs.readFile(vaultPath, "utf8");
+	return decrypt(ciphertext, passphrase);
 }
 
 async function safeRead(p: string): Promise<string | null> {

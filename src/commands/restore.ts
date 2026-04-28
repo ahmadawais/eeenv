@@ -2,9 +2,18 @@ import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { chmodSafe, unlinkIfExists } from "../lib/fs-ops.js";
-import { bold, dim, ok, warn } from "../lib/log.js";
+import { bold, dim, err, ok, warn } from "../lib/log.js";
+import { promptSecret } from "../lib/prompt.js";
 import type { AbsPath } from "../lib/types.js";
-import { ensureDir, readManifest, toAbs, writeManifest } from "../lib/vault.js";
+import {
+	decryptFromVault,
+	ensureDir,
+	getPassphrase,
+	readManifest,
+	storePassphrase,
+	toAbs,
+	writeManifest,
+} from "../lib/vault.js";
 
 /** Restore real values from the vault back into the project. */
 export async function runRestore(cwdRaw: string): Promise<void> {
@@ -17,6 +26,22 @@ export async function runRestore(cwdRaw: string): Promise<void> {
 		return;
 	}
 
+	let passphrase = await getPassphrase();
+	if (!passphrase) {
+		// Vault is locked — prompt to unlock inline
+		// Test bypass: read from env to avoid stdin prompt
+		const testPass = process.env.EEENV_TEST_PASSPHRASE;
+		const input =
+			testPass ?? (await promptSecret("Vault is locked. Enter passphrase to unlock: "));
+		if (!input) {
+			err("No passphrase provided. Vault remains locked.");
+			return;
+		}
+		passphrase = input;
+		await storePassphrase(passphrase);
+		ok("Vault unlocked.");
+	}
+
 	for (const [rel, entry] of targets) {
 		const vaultPath = entry.vaultPath as AbsPath;
 		const dest = path.join(cwd, ...rel.split("/")) as AbsPath;
@@ -26,9 +51,18 @@ export async function runRestore(cwdRaw: string): Promise<void> {
 			continue;
 		}
 
+		let plaintext: string;
+		try {
+			plaintext = await decryptFromVault(vaultPath, passphrase);
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			err(`${rel}: failed to decrypt — ${msg}`);
+			return;
+		}
+
 		await ensureDir(path.dirname(dest) as AbsPath);
 		await unlinkIfExists(dest);
-		await fs.copyFile(vaultPath, dest);
+		await fs.writeFile(dest, plaintext, { mode: 0o600 });
 		await chmodSafe(dest, 0o600);
 		delete manifest.files[rel];
 		ok(`restored ${bold(rel)} ← ${dim(vaultPath)}`);
