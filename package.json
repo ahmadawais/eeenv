@@ -1,0 +1,56 @@
+{
+	"name": "eeenv",
+	"version": "0.0.1",
+	"description": "Hide your project .env files in a per-project global vault so coding agents can't read them. Move, copy, hide, restore.",
+	"type": "module",
+	"bin": {
+		"eeenv": "./dist/cli.js"
+	},
+	"files": ["dist", "README.md", "LICENSE"],
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"build": "tsup",
+		"dev": "tsup --watch",
+		"start": "node dist/cli.js",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"typecheck": "tsc --noEmit",
+		"check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+		"prepublishOnly": "pnpm check"
+	},
+	"keywords": [
+		"env",
+		"dotenv",
+		"secrets",
+		"security",
+		"ai",
+		"agents",
+		"prompt-injection",
+		"vault",
+		"cli"
+	],
+	"license": "MIT",
+	"dependencies": {
+		"commander": "^12.1.0",
+		"figlet": "^1.7.0",
+		"ora": "^8.1.0",
+		"picocolors": "^1.0.1",
+		"zod": "^3.23.8"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.8.3",
+		"@types/figlet": "^1.5.8",
+		"@types/node": "^20.14.0",
+		"tsup": "^8.2.0",
+		"typescript": "^5.5.4",
+		"vitest": "^2.0.0"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
+	}
+}

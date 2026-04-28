@@ -1,0 +1,24 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ES2022",
+		"moduleResolution": "Bundler",
+		"outDir": "dist",
+		"rootDir": ".",
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noFallthroughCasesInSwitch": true,
+		"exactOptionalPropertyTypes": false,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"verbatimModuleSyntax": false,
+		"declaration": false,
+		"sourceMap": false,
+		"forceConsistentCasingInFileNames": true,
+		"allowImportingTsExtensions": false
+	},
+	"include": ["src/**/*", "tests/**/*"]
+}

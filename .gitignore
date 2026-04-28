@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Demo project ships with FAKE values intentionally — keep them tracked.
+!examples/**/.env
+!examples/**/.env.*
